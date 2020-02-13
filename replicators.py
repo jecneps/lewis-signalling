@@ -15,7 +15,7 @@ singleStrats = genSingleStrats(2)
 
 
 def randWorldState():
-    x = random.randint(0,1)
+    x = random.randint(0,2)
     return x
 
 
@@ -46,13 +46,16 @@ class Agent(object):
 class UrnAgent(object):
 
     def __init__(self, n):
-        self.urn = [1 for x in range(n)]
-        self.lastPlay = None
+        #floats, important
+        self.urns = [[1.0 for y in range(n)] for x in range(n)]
 
     def play(self, info):
-        stratIndex = random.choices(range(len(self.urn)), self.urn)[0]
-        self.lastPlay = singleStrats[stratIndex]
-        return self.lastPlay[info]
+        urn = self.urns[info]
+        return random.choices(range(len(urn)), urn)[0]
+
+    def printUrns(self):
+        for i, urn in enumerate(self.urns):
+            print("stim=" + str(i) + " " + str(urn))
 
 class Reinforcement(object):
     
@@ -63,18 +66,35 @@ class Reinforcement(object):
     def pairs(self):
         yield (self.sender, self.receiver)
 
-    def recordGame(self, a1, a2, pay):
-        if pay == 1:
-            a1Index = singleStrats.index(a1.lastPlay)
-            a1.urn[a1Index] = a1.urn[a1Index] + 1
-            a2Index = singleStrats.index(a2.lastPlay)
-            a2.urn[a2Index] = a2.urn[a2Index] + 1
     def learn(self):
         pass
 
     def plot(self):
-        print("Senders urn: " + str(self.sender.urn))
-        print("receiver urn: " + str(self.receiver.urn))
+        print("Senders urns: ")
+        self.sender.printUrns()
+        print("receiver urn: ")
+        self.receiver.printUrns()
+
+    def normalizeUrn(self, urn):
+        s = sum(urn)
+        return list(map(lambda x: x/s,
+                        urn)
+                    )
+
+    def playGame(self, sender, receiver):
+        state = randWorldState()
+        signal = sender.play(state)
+        action = receiver.play(signal)
+        #print("state: " + str(state) + " signal: " + str(signal) + " action: " + str(action))
+        if payout(state, action) == 1:
+            self.updateUrn(sender, state, signal)
+            self.updateUrn(receiver, signal, action)
+
+    def updateUrn(self, agent, stimulus, result):
+        urn = agent.urns[stimulus]
+        urn[result] = urn[result] + 1
+        agent.urns[stimulus] = self.normalizeUrn(urn)
+
 
 
 
@@ -141,7 +161,7 @@ class Simulation(object):
 
     def doStep(self):
         for (a1, a2) in self.model.pairs():
-            self.playUrnGame(a1, a2, self.model.recordGame)
+            self.model.playGame(a1, a2)
         self.model.learn()
 
     def plot(self):
@@ -158,10 +178,7 @@ class Simulation(object):
         #print("a2=" + str(a2.strat) + ", a1=" + str(a1.strat) + "state=" +str(state) + ", res=" + str(res) + ", pay=" + str(payout(state, res)))
         record(a1, a2, payout(state, res))
 
-    def playUrnGame(self, send, receive, record):
-        state = randWorldState()
-        res = receive.play(send.play(state))
-        record(send, receive, payout(state, res))
+    
 
     def run(self, n):
         for i in range(n):
@@ -171,10 +188,10 @@ def payout(state, res):
     return 1 if state == res else 0
 
 replicators = ReplicatorDynamics()
-reinforcement = Reinforcement(4)
+reinforcement = Reinforcement(3)
 sim = Simulation(reinforcement)
 print(singleStrats)
-sim.run(100)
+sim.run(50)
 
 
 
