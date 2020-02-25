@@ -2,6 +2,7 @@ import random
 import itertools
 from collections import namedtuple
 from functools import reduce
+import pickle
 
 def genStrats(n):
     strats = list(itertools.product(range(n), repeat=n))
@@ -14,12 +15,12 @@ def genSingleStrats(n):
 singleStrats = genSingleStrats(2)
 
 
-def randWorldState():
-    x = random.randint(0,2)
+def randWorldState(n):
+    x = random.randint(0,n-1)
     return x
 
 
-strats = genStrats(2)
+strats = genStrats(4)
 
 class Entry(object):
     def __init__(self, pop, fitness):
@@ -51,17 +52,33 @@ class UrnAgent(object):
 
     def play(self, info):
         urn = self.urns[info]
-        return random.choices(range(len(urn)), urn)[0]
+        return random.choices(range(len(urn)), self.normalizeUrn(urn))[0]
+
+    def normalizeUrn(self, urn):
+        s = sum(urn)
+        return list(map(lambda x: x/s,
+                        urn)
+                    )
+
+    def urnFormat(self, urn):
+        return "[" + "%8.4f," * len(urn) + "]"
 
     def printUrns(self):
         for i, urn in enumerate(self.urns):
-            print("stim=" + str(i) + " " + str(urn))
+            f = "stim: " + str(i) + " , " + self.urnFormat(urn)
+            print(f %tuple(urn))
 
 class Reinforcement(object):
     
     def __init__(self, n):
         self.sender = UrnAgent(n)
         self.receiver = UrnAgent(n)
+        self.n = n
+        self.convThreshold = 0.999
+
+    def reset(self):
+        self.sender = UrnAgent(self.n)
+        self.receiver = UrnAgent(self.n)
 
     def pairs(self):
         yield (self.sender, self.receiver)
@@ -74,15 +91,11 @@ class Reinforcement(object):
         self.sender.printUrns()
         print("receiver urn: ")
         self.receiver.printUrns()
-
-    def normalizeUrn(self, urn):
-        s = sum(urn)
-        return list(map(lambda x: x/s,
-                        urn)
-                    )
+        print("With the expected value of " + str(self.calculateExpectedValue(self.sender, self.receiver)))
+        
 
     def playGame(self, sender, receiver):
-        state = randWorldState()
+        state = randWorldState(self.n)
         signal = sender.play(state)
         action = receiver.play(signal)
         #print("state: " + str(state) + " signal: " + str(signal) + " action: " + str(action))
@@ -93,18 +106,51 @@ class Reinforcement(object):
     def updateUrn(self, agent, stimulus, result):
         urn = agent.urns[stimulus]
         urn[result] = urn[result] + 1
-        agent.urns[stimulus] = self.normalizeUrn(urn)
+
+    def urnHasConverged(self, urn):
+        return len(list(filter(lambda p: p > self.convThreshold,
+                            urn))) == 1
+
+    def agentConverged(self, agent):
+        return reduce(lambda acc, b: b and acc,
+                        map(lambda urn: self.urnHasConverged(urn),
+                            agent.urns),
+                        True
+                        )
+
+    def stopLearning(self):
+        return self.score() >= self.convThreshold
+
+
+    def score(self):
+        return self.calculateExpectedValue(self.sender, self.receiver)
+
+    def calculateExpectedValue(self, sender, receiver):
+        ev = 0
+        for state, senderUrn in enumerate(sender.urns):
+            stateEV = 0
+            for signal, probOfSend in enumerate(sender.normalizeUrn(senderUrn)):
+                receiverUrn = receiver.urns[signal]
+                sigEV = 0
+                for action, probOfDo in enumerate(receiver.normalizeUrn(receiverUrn)):
+                    sigEV = sigEV + probOfDo * payout(state, action)
+                stateEV = stateEV + sigEV * probOfSend
+
+            ev = ev + stateEV * (1 / self.n)
+        return ev
+
 
 
 
 
 class ReplicatorDynamics(object):
 
-    def __init__(self):
+    def __init__(self, n):
         self.table = dict()
-        self.alpha = 5
+        self.alpha = 0
+        self.n = n
         for strat in strats:
-            self.table[strat] = Entry(40,0)
+            self.table[strat] = Entry(10,0)
 
     def pairs(self):
         weights = list(map(lambda strat: self.table[strat].population,
@@ -128,29 +174,45 @@ class ReplicatorDynamics(object):
     def learn(self):
         meanFitness = self.calcMeanFitness()
         for strat in strats:
-            self.table[strat].population = self.calcPopUpdate(strat, meanFitness)
-            self.table[strat].fitness = 0 #zero it just in case?
+            if self.table[strat].population > 0:
+                self.table[strat].population = self.calcPopUpdate(strat, meanFitness)
+                self.table[strat].fitness = 0 #zero it just in case?
 
     def calcPopUpdate(self, strat, meanFitness):
         prevPop = self.table[strat].population
-        delta = (self.alpha + self.table[strat].fitness) / (self.alpha + meanFitness)
+        delta = (self.alpha + self.calcStratFitness(strat)) / (self.alpha + meanFitness)
         return round(prevPop * delta)
 
     def calcMeanFitness(self):
-        fitness = reduce(lambda acc, x: acc + x,
-                     map(lambda s: self.table[s].fitness,
-                         strats),
-                     0)
-        l = len(list(filter(lambda p: p != 0,
-                       map(lambda s: self.table[s].population,
-                           strats))))
-        return fitness / l
+        fitness = sum(map(lambda s: self.table[s].fitness,
+                         strats))
+        numOfAgents = sum(map(lambda s: self.table[s].population,
+                            strats)) 
+        return fitness / numOfAgents
+
+    def calcStratFitness(self, strat):
+        return self.table[strat].fitness / self.table[strat].population
+
+    def playGame(self, a1, a2):
+        state = randWorldState(self.n)
+        res = a2.play(1, a1.play(0, state))
+       # print("a1=" + str(a1.strat) + ", a2=" + str(a2.strat) + "state=" +str(state) + ", res=" + str(res) + ", pay=" + str(payout(state, res)))
+        self.recordGame(a1, a2, payout(state, res))
+        state = randWorldState(self.n)
+        res = a1.play(1, a2.play(0, state))
+        #print("a2=" + str(a2.strat) + ", a1=" + str(a1.strat) + "state=" +str(state) + ", res=" + str(res) + ", pay=" + str(payout(state, res)))
+        self.recordGame(a1, a2, payout(state, res))
 
     def plot(self):
         print("Population")
         for strat in strats:
             print(strat)
             print("The above strat has a population of :" + str(self.table[strat].population))
+
+    def stopLearning(self):
+        return len(list(filter(lambda pop: pop > 0,
+                            map(lambda strat: self.table[strat].population,
+                                strats)))) == 1
 
     
 
@@ -165,33 +227,38 @@ class Simulation(object):
         self.model.learn()
 
     def plot(self):
-        self.model.plot()
-                   
-                   
-    def playgame(self, a1, a2, record):
-        state = randWorldState()
-        res = a2.play(1, a1.play(0, state))
-       # print("a1=" + str(a1.strat) + ", a2=" + str(a2.strat) + "state=" +str(state) + ", res=" + str(res) + ", pay=" + str(payout(state, res)))
-        record(a1, a2, payout(state, res))
-        state = randWorldState()
-        res = a1.play(1, a2.play(0, state))
-        #print("a2=" + str(a2.strat) + ", a1=" + str(a1.strat) + "state=" +str(state) + ", res=" + str(res) + ", pay=" + str(payout(state, res)))
-        record(a1, a2, payout(state, res))
+        self.model.plot()    
 
-    
-
-    def run(self, n):
-        for i in range(n):
+    def run(self, limit = None):
+        i = 0
+        while(limit == None or i < limit):
             self.doStep()
-        self.plot()
+            if self.model.stopLearning():
+                print(self.model.score())
+                return (True, i)
+            i = i + 1
+
+        self.plot()   
+        return (False, self.model.score())
+
+    def recordSimulations(self, n, cap, fileName):
+        results = []
+        for i in range(n):
+            self.model.reset()
+            results.append(self.run(limit = cap))
+
+        print(fileName)
+        pickle.dump(results, open(fileName, "wb"))
+
+
 def payout(state, res):
     return 1 if state == res else 0
 
-replicators = ReplicatorDynamics()
-reinforcement = Reinforcement(3)
+replicators = ReplicatorDynamics(4)
+reinforcement = Reinforcement(8)
 sim = Simulation(reinforcement)
-print(singleStrats)
-sim.run(50)
+sim.run(100000)
+#sim.recordSimulations(20, 10000, "simdata.p")
 
 
 
