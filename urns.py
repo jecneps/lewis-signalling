@@ -2,6 +2,7 @@ import random
 import itertools
 from collections import namedtuple
 from functools import reduce
+from utils import Utils as ut
 
 class UrnAgent(object):
 
@@ -11,7 +12,20 @@ class UrnAgent(object):
 
     def play(self, info):
         urn = self.urns[info]
-        return random.choices(range(len(urn)), urn)[0]
+        return random.choices(range(len(urn)), self.normalizeUrn(urn))[0]
+
+    def normalizeUrn(self, urn):
+        s = sum(urn)
+        return list(map(lambda x: x/s,
+                        urn)
+                    )
+
+    def addState(self):
+        n = len(self.urns)
+        #the new slot should have 1/(n+1) prob of being picked
+        for urn in self.urns:
+            urn.append(round(sum(urn) / (n)))
+        self.urns.append([1.0 for x in range(n + 1)])
 
     def urnFormat(self, urn):
         return "[" + "%8.4f," * len(urn) + "]"
@@ -23,11 +37,15 @@ class UrnAgent(object):
 
 class Reinforcement(object):
     
-    def __init__(self, n):
+    def __init__(self, n, convThreshold):
         self.sender = UrnAgent(n)
         self.receiver = UrnAgent(n)
         self.n = n
-        self.convThreshold = 0.999
+        self.convThreshold = convThreshold
+
+    def reset(self):
+        self.sender = UrnAgent(self.n)
+        self.receiver = UrnAgent(self.n)
 
     def pairs(self):
         yield (self.sender, self.receiver)
@@ -40,26 +58,21 @@ class Reinforcement(object):
         self.sender.printUrns()
         print("receiver urn: ")
         self.receiver.printUrns()
-
-    def normalizeUrn(self, urn):
-        s = sum(urn)
-        return list(map(lambda x: x/s,
-                        urn)
-                    )
+        print("With the expected value of " + str(self.calculateExpectedValue(self.sender, self.receiver)))
+        
 
     def playGame(self, sender, receiver):
-        state = randWorldState(self.n)
+        state = ut.randWorldState(self.n)
         signal = sender.play(state)
         action = receiver.play(signal)
         #print("state: " + str(state) + " signal: " + str(signal) + " action: " + str(action))
-        if payout(state, action) == 1:
+        if ut.payout(state, action) == 1:
             self.updateUrn(sender, state, signal)
             self.updateUrn(receiver, signal, action)
 
     def updateUrn(self, agent, stimulus, result):
         urn = agent.urns[stimulus]
         urn[result] = urn[result] + 1
-        agent.urns[stimulus] = self.normalizeUrn(urn)
 
     def urnHasConverged(self, urn):
         return len(list(filter(lambda p: p > self.convThreshold,
@@ -73,4 +86,23 @@ class Reinforcement(object):
                         )
 
     def stopLearning(self):
-        return self.agentConverged(self.sender) and self.agentConverged(self.receiver)
+        return self.score() >= self.convThreshold
+
+
+    def score(self):
+        return self.calculateExpectedValue(self.sender, self.receiver)
+
+    def calculateExpectedValue(self, sender, receiver):
+        ev = 0
+        for state, senderUrn in enumerate(sender.urns):
+            stateEV = 0
+            for signal, probOfSend in enumerate(sender.normalizeUrn(senderUrn)):
+                receiverUrn = receiver.urns[signal]
+                sigEV = 0
+                for action, probOfDo in enumerate(receiver.normalizeUrn(receiverUrn)):
+                    sigEV = sigEV + probOfDo * ut.payout(state, action)
+                stateEV = stateEV + sigEV * probOfSend
+
+            ev = ev + stateEV * (1 / self.n)
+        return ev
+
