@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 
-data = pickle.load(open("test.p", "rb"))
+data = pickle.load(open("n4Urns.p", "rb"))
 
 print(data)
 
@@ -18,7 +18,7 @@ def makeEVHist(data):
 	plt.xlabel("Expected Value (scaled and rounded)")
 	plt.ylabel("Number of Simulations")
 	plt.title("Histogram of the EV of " + str(len(results)) + " simulations")
-	plt.savefig("evtest.png")
+	plt.savefig("ev4.png")
 	plt.clf()
 
 def makeStepHist(data):
@@ -35,9 +35,9 @@ def makeStepHist(data):
 	plt.xscale("log")
 	plt.ylabel("Number of Simulations")
 	plt.title("Histogram of the Convergence rates of " + str(len(results)) + " simulations")
-	plt.savefig("steptest3.png")
+	plt.savefig("step4.png")
 	plt.clf()
 
-#makeStepHist(data)
+makeStepHist(data)
 makeEVHist(data)
 
