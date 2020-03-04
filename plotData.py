@@ -1,11 +1,12 @@
 import pickle
 import numpy as np
+from functools import reduce
 import matplotlib.pyplot as plt 
 import pandas as pd 
 
 
 
-data = pickle.load(open("n2Levels.p", "rb"))
+data = pickle.load(open("stateAddition.p", "rb"))
 
 
 def makeEVHist(data):
@@ -48,18 +49,36 @@ def makeLevelsGraph(data):
 		states[i] = list(map(lambda urnMap: round(urnMap[i] * 100),
 								res[0][0]))
 	d = {"x": range(1, len(states[0]) + 1)}
-	print(len(states[0]))
-	print(len(states[1]))
 	for key in states:
 		d["y" + str(key)] = states[key]
-		print(len(d["y" + str(key)]))
-	#print(d)
-	print(len(d["x"]))
+
 	df = pd.DataFrame(d)
 	for key in states:
 		plt.plot("x", "y" + str(key), data = df)
 	plt.savefig("urnLevels.png")
 
+
+def plotStateAddition(data):
+	res = data["results"]
+	bigList = res[0][0]
+	print(res[0][1])
+	seriesByState = dict()
+	for i in range(data["nCap"]):
+		seriesByState[i] = list(map(lambda urn: 0 if i >= len(urn) else urn[i] ,
+								bigList))
+
+	d = {"x": range(1, len(seriesByState[0]) + 1)}
+	for key in seriesByState:
+		d["y" + str(key)] = seriesByState[key]
+
+	df = pd.DataFrame(d)
+	for key in seriesByState:
+		plt.plot("x", "y" + str(key), data=df)
+	plt.savefig("stateAddition2.png")
+
+
+
 #makeStepHist(data)
 #makeEVHist(data)
-makeLevelsGraph(data)
+#makeLevelsGraph(data)
+plotStateAddition(data)

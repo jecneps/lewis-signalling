@@ -43,12 +43,18 @@ class Reinforcement(object):
         self.n = n
         self.convThreshold = convThreshold
 
-    def reset(self):
+    def reset(self, n):
+        self.n = n
         self.sender = UrnAgent(self.n)
         self.receiver = UrnAgent(self.n)
 
     def pairs(self):
         yield (self.sender, self.receiver)
+
+    def addState(self):
+        self.n = self.n + 1
+        self.sender.addState()
+        self.receiver.addState()
 
     def learn(self):
         pass

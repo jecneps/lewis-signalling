@@ -37,18 +37,48 @@ class Simulation(object):
 
         return (l, False, self.model.score())
 
-    def runStateAddition(self, limit=None, nCap):
+    def runStateAddition(self, timeTillAdd, nCap):
         i = 0
-        startingN = self.n
+        timeSinceAdd = i
+        startingN = self.model.n
         curN = startingN
-        while(limit = None or i < limit):
+        data = []
+        indexes = []
+        while(curN <= nCap or timeSinceAdd >= timeTillAdd):
             self.doStep()
-            if self.model.stopLearning
+            i = i + 1
+            timeSinceAdd = timeSinceAdd + 1
+            data.append(self.model.cooperationValues())
+
+            if self.model.stopLearning() or timeSinceAdd >= timeTillAdd:
+                curN = curN + 1
+                timeSinceAdd = 0
+                self.model.addState()
+                indexes.append(i)
+                print("added! " + str(i))
+        return (data, indexes)
+
+    def recordStateAddition(self, n, timeTillAdd, startN, nCap, fileName):
+        results = []
+        for i in range(n):
+            self.model.reset(startN)
+            results.append(self.runStateAddition(timeTillAdd, nCap))
+            print(str(i))
+
+        data = dict()
+        data["startN"] = startN
+        data["nCap"] = nCap
+        data["n"] = n
+        data["timeTillAdd"] = timeTillAdd
+        data["results"] = results
+        data["convThreshold"] = self.model.convThreshold
+        pickle.dump(data, open(fileName, "wb"))
+
 
     def recordSimulations(self, n, cap, fileName):
         results = []
         for i in range(n):
-            self.model.reset()
+            self.model.reset(self.model.n)
             results.append(self.run(limit = cap))
             print(str(i))
 
@@ -64,7 +94,7 @@ class Simulation(object):
     def recordUrnLevels(self, n, cap, fileName):
         results = []
         for i in range(n):
-            self.model.reset()
+            self.model.reset(self.model.n)
             results.append(self.runUrnLevels(limit = cap))
             print(str(i))
 
