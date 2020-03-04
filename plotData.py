@@ -1,12 +1,12 @@
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt 
+import pandas as pd 
 
 
 
-data = pickle.load(open("n4Urns.p", "rb"))
+data = pickle.load(open("n2Levels.p", "rb"))
 
-print(data)
 
 def makeEVHist(data):
 	results = data["results"]
@@ -38,6 +38,28 @@ def makeStepHist(data):
 	plt.savefig("step4.png")
 	plt.clf()
 
-makeStepHist(data)
-makeEVHist(data)
+#currently only graphs on simulations worth...
+#... need to decide how i want to aggregate
+def makeLevelsGraph(data):
+	res = data["results"]
+	numUrns = len(res[0][0][0])
+	states = dict()
+	for i in range(numUrns):
+		states[i] = list(map(lambda urnMap: round(urnMap[i] * 100),
+								res[0][0]))
+	d = {"x": range(1, len(states[0]) + 1)}
+	print(len(states[0]))
+	print(len(states[1]))
+	for key in states:
+		d["y" + str(key)] = states[key]
+		print(len(d["y" + str(key)]))
+	#print(d)
+	print(len(d["x"]))
+	df = pd.DataFrame(d)
+	for key in states:
+		plt.plot("x", "y" + str(key), data = df)
+	plt.savefig("urnLevels.png")
 
+#makeStepHist(data)
+#makeEVHist(data)
+makeLevelsGraph(data)

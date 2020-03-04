@@ -33,7 +33,7 @@ class UrnAgent(object):
     def printUrns(self):
         for i, urn in enumerate(self.urns):
             f = "stim: " + str(i) + " , " + self.urnFormat(urn)
-            print(f %tuple(urn))
+            print(f %tuple(self.normalizeUrn(urn)))
 
 class Reinforcement(object):
     
@@ -92,17 +92,32 @@ class Reinforcement(object):
     def score(self):
         return self.calculateExpectedValue(self.sender, self.receiver)
 
+
+    def calculateStateEV(self, sender, receiver, state, senderUrn):
+        stateEV = 0
+        for signal, probOfSend in enumerate(sender.normalizeUrn(senderUrn)):
+            receiverUrn = receiver.urns[signal]
+            sigEV = 0
+            for action, probOfDo in enumerate(receiver.normalizeUrn(receiverUrn)):
+                sigEV = sigEV + probOfDo * ut.payout(state, action)
+            stateEV = stateEV + sigEV * probOfSend
+
+        return stateEV
+
     def calculateExpectedValue(self, sender, receiver):
         ev = 0
         for state, senderUrn in enumerate(sender.urns):
-            stateEV = 0
-            for signal, probOfSend in enumerate(sender.normalizeUrn(senderUrn)):
-                receiverUrn = receiver.urns[signal]
-                sigEV = 0
-                for action, probOfDo in enumerate(receiver.normalizeUrn(receiverUrn)):
-                    sigEV = sigEV + probOfDo * ut.payout(state, action)
-                stateEV = stateEV + sigEV * probOfSend
-
+            #print(state)
+            stateEV = self.calculateStateEV(sender, receiver, state, senderUrn)
+            #print("state ev: " + str(stateEV))
             ev = ev + stateEV * (1 / self.n)
+            #print(ev)
         return ev
+
+    def cooperationValues(self):
+        return list(map(lambda tup: self.calculateStateEV(self.sender, 
+                                                                        self.receiver,
+                                                                         tup[0],
+                                                                          tup[1]),
+                        enumerate(self.sender.urns)))
 
