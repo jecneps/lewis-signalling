@@ -1,5 +1,6 @@
 import pickle
 
+
 class Simulation(object):
 
     def __init__(self, model):
